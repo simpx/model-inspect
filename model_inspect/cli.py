@@ -76,9 +76,9 @@ def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0) -
     if verbose >= 2:
         print(f"Index content: {index}")
     
-    # 获取所有分片文件头
+    # 获取所有分片文件头，按文件名排序
     headers = {}
-    for filename in set(index["weight_map"].values()):
+    for filename in sorted(set(index["weight_map"].values())):
         if verbose >= 1:
             print(f"Parsing shard: {filename}")
         headers[filename] = parse_single_file(repo, filename, revision, verbose)
