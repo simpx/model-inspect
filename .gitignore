@@ -10,3 +10,4 @@ venv/
 # Build
 dist/
 *.egg-info/
+*.dist-info/
