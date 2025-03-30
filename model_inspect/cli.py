@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple, Union
 
 import requests
 from prettytable import PrettyTable
+from tqdm import tqdm
 
 # 常量定义
 SAFETENSORS_FILE = "model.safetensors"
@@ -78,10 +79,13 @@ def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0) -
     
     # 获取所有分片文件头，按文件名排序
     headers = {}
-    for filename in sorted(set(index["weight_map"].values())):
-        if verbose >= 1:
-            print(f"Parsing shard: {filename}")
-        headers[filename] = parse_single_file(repo, filename, revision, verbose)
+    shard_files = sorted(set(index["weight_map"].values()))
+    with tqdm(total=len(shard_files), desc="Processing shards") as pbar:
+        for filename in shard_files:
+            if verbose >= 1:
+                print(f"Parsing shard: {filename}")
+            headers[filename] = parse_single_file(repo, filename, revision, verbose)
+            pbar.update(1)
     
     return index, headers
 
