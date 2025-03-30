@@ -29,25 +29,25 @@ DTYPE_BYTES = {
     "BOOL": 1
 }
 
-def get_file_response(repo: str, filename: str, revision: str = REVISION, range_header: str = None, verbose: bool = False) -> requests.Response:
+def get_file_response(repo: str, filename: str, revision: str = REVISION, range_header: str = None, verbose: int = 0) -> requests.Response:
     """获取文件响应，支持范围请求"""
     url = HF_URL.format(repo=repo, revision=revision, filename=filename)
     headers = {'Range': range_header} if range_header else {}
-    if verbose:
+    if verbose >= 1:
         print(f"Fetching URL: {url} with headers: {headers}")
     response = requests.get(url, headers=headers, stream=True)
     response.raise_for_status()
     return response
 
-def parse_single_file(repo: str, filename: str, revision: str = REVISION, verbose: bool = False) -> dict:
+def parse_single_file(repo: str, filename: str, revision: str = REVISION, verbose: int = 0) -> dict:
     """解析单个safetensors文件头"""
-    if verbose:
+    if verbose >= 1:
         print(f"Parsing single file: {filename}")
     # 获取头部长度
     response = get_file_response(repo, filename, revision, 'bytes=0-7', verbose)
     header_length = struct.unpack('<Q', response.content)[0]  # little-endian
     
-    if verbose:
+    if verbose >= 1:
         print(f"Header length: {header_length}")
     
     if header_length > 25_000_000:
@@ -59,37 +59,37 @@ def parse_single_file(repo: str, filename: str, revision: str = REVISION, verbos
     
     try:
         header = json.loads(response.content)
-        if verbose:
+        if verbose >= 2:
             print(f"Parsed header: {header}")
         return header
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON header")
 
-def parse_sharded_index(repo: str, revision: str = REVISION, verbose: bool = False) -> Tuple[dict, dict]:
+def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0) -> Tuple[dict, dict]:
     """解析分片索引文件"""
-    if verbose:
+    if verbose >= 1:
         print("Parsing sharded index file")
     # 获取索引文件
     response = get_file_response(repo, SAFETENSORS_INDEX_FILE, revision, verbose=verbose)
     index = json.loads(response.content)
     
-    if verbose:
+    if verbose >= 2:
         print(f"Index content: {index}")
     
     # 获取所有分片文件头
     headers = {}
     for filename in set(index["weight_map"].values()):
-        if verbose:
+        if verbose >= 1:
             print(f"Parsing shard: {filename}")
         headers[filename] = parse_single_file(repo, filename, revision, verbose)
     
     return index, headers
 
-def get_model_layers(repo: str, revision: str = REVISION, verbose: bool = False) -> List[dict]:
+def get_model_layers(repo: str, revision: str = REVISION, verbose: int = 0) -> List[dict]:
     """获取模型层信息"""
     try:
         # 尝试获取索引文件
-        if verbose:
+        if verbose >= 1:
             print("Attempting to parse sharded index")
         index, headers = parse_sharded_index(repo, revision, verbose)
         all_tensors = []
@@ -98,8 +98,8 @@ def get_model_layers(repo: str, revision: str = REVISION, verbose: bool = False)
             if tensor_name in header:
                 tensor_info = header[tensor_name]
                 tensor_size = math.prod(tensor_info["shape"]) * DTYPE_BYTES.get(tensor_info["dtype"], 1)
-                if verbose:
-                    print(f"Tensor: {tensor_name}, Shape: {tensor_info['shape']}, Size: {tensor_size}")
+                if verbose >= 1:
+                    print(f"Processing tensor: {tensor_name}")
                 all_tensors.append({
                     "name": tensor_name,
                     "shape": tensor_info["shape"],
@@ -109,7 +109,7 @@ def get_model_layers(repo: str, revision: str = REVISION, verbose: bool = False)
         return all_tensors
     except Exception:
         # 处理单个文件情况
-        if verbose:
+        if verbose >= 1:
             print("Falling back to single file parsing")
         header = parse_single_file(repo, SAFETENSORS_FILE, revision, verbose)
         return [{
@@ -123,7 +123,7 @@ def main():
     parser = argparse.ArgumentParser(description="Hugging Face Model Layer Analyzer")
     parser.add_argument("model", type=str, help="Hugging Face model name (e.g. 'username/model')")
     parser.add_argument("--revision", type=str, default=REVISION, help="Model revision")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("-v", "--verbose", action="count", default=0, help="Enable verbose output (-v for process, -vv for content)")
     args = parser.parse_args()
 
     try:
