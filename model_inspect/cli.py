@@ -4,6 +4,7 @@ import math
 import struct
 from collections import defaultdict
 from typing import Dict, List, Tuple, Union
+import concurrent.futures
 
 import requests
 from prettytable import PrettyTable
@@ -80,12 +81,19 @@ def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0) -
     # 获取所有分片文件头，按文件名排序
     headers = {}
     shard_files = sorted(set(index["weight_map"].values()))
+
+    def fetch_header(filename):
+        if verbose >= 1:
+            print(f"Parsing shard: {filename}")
+        return filename, parse_single_file(repo, filename, revision, verbose)
+
     with tqdm(total=len(shard_files), desc="Processing shards") as pbar:
-        for filename in shard_files:
-            if verbose >= 1:
-                print(f"Parsing shard: {filename}")
-            headers[filename] = parse_single_file(repo, filename, revision, verbose)
-            pbar.update(1)
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_to_file = {executor.submit(fetch_header, filename): filename for filename in shard_files}
+            for future in concurrent.futures.as_completed(future_to_file):
+                filename, header = future.result()
+                headers[filename] = header
+                pbar.update(1)
     
     return index, headers
 
@@ -111,10 +119,10 @@ def get_model_layers(repo: str, revision: str = REVISION, verbose: int = 0) -> L
                     "size": tensor_size
                 })
         return all_tensors
-    except Exception:
+    except Exception as e:
         # 处理单个文件情况
         if verbose >= 1:
-            print("Falling back to single file parsing")
+            print("Falling back to single file parsing, due to exception:", str(e))
         header = parse_single_file(repo, SAFETENSORS_FILE, revision, verbose)
         return [{
             "name": name,
