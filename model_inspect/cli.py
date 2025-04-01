@@ -67,7 +67,7 @@ def parse_single_file(repo: str, filename: str, revision: str = REVISION, verbos
     except json.JSONDecodeError:
         raise ValueError("Invalid JSON header")
 
-def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0) -> Tuple[dict, dict]:
+def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0, jobs: int = 1) -> Tuple[dict, dict]:
     """解析分片索引文件"""
     if verbose >= 1:
         print("Parsing sharded index file")
@@ -88,7 +88,7 @@ def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0) -
         return filename, parse_single_file(repo, filename, revision, verbose)
 
     with tqdm(total=len(shard_files), desc="Processing shards") as pbar:
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
             future_to_file = {executor.submit(fetch_header, filename): filename for filename in shard_files}
             for future in concurrent.futures.as_completed(future_to_file):
                 filename, header = future.result()
@@ -97,13 +97,13 @@ def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0) -
     
     return index, headers
 
-def get_model_layers(repo: str, revision: str = REVISION, verbose: int = 0) -> List[dict]:
+def get_model_layers(repo: str, revision: str = REVISION, verbose: int = 0, jobs: int = 1) -> List[dict]:
     """获取模型层信息"""
     try:
         # 尝试获取索引文件
         if verbose >= 1:
             print("Attempting to parse sharded index")
-        index, headers = parse_sharded_index(repo, revision, verbose)
+        index, headers = parse_sharded_index(repo, revision, verbose, jobs)
         all_tensors = []
         for tensor_name, filename in index["weight_map"].items():
             header = headers[filename]
@@ -136,10 +136,11 @@ def main():
     parser.add_argument("model", type=str, help="Hugging Face model name (e.g. 'username/model')")
     parser.add_argument("--revision", type=str, default=REVISION, help="Model revision")
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Enable verbose output (-v for process, -vv for content)")
+    parser.add_argument("-j", "--jobs", type=int, default=1, help="Number of concurrent jobs (default: 1)")
     args = parser.parse_args()
 
     try:
-        layers = get_model_layers(args.model, args.revision, verbose=args.verbose)
+        layers = get_model_layers(args.model, args.revision, verbose=args.verbose, jobs=args.jobs)
         table = PrettyTable()
         table.field_names = ["Layer Name", "Shape", "Data Type", "Size (bytes)"]
         table.align["Layer Name"] = "l"
