@@ -32,7 +32,7 @@ Output:
 | model.layers.0.input_layernorm.weight           |     (896,)    |    BF16   |        1,792 |
 | model.layers.0.mlp.down_proj.weight             |  (896, 4864)  |    BF16   |    8,716,288 |
 | model.layers.0.mlp.gate_proj.weight             |  (4864, 896)  |    BF16   |    8,716,288 |
-|  ...                                                                                       |
+|                                          ...                                               |
 | model.layers.23.self_attn.q_proj.weight         |   (896, 896)  |    BF16   |    1,605,632 |
 | model.layers.23.self_attn.v_proj.bias           |     (128,)    |    BF16   |          256 |
 | model.layers.23.self_attn.v_proj.weight         |   (128, 896)  |    BF16   |      229,376 |
