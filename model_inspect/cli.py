@@ -25,6 +25,28 @@ HEADERS = {
 DEFAULT_TIMEOUT = 30  # seconds
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF = 1  # seconds
+# 添加数据类型字节大小映射
+DTYPE_BYTES = {
+    "F32": 4,
+    "F16": 2,
+    "BF16": 2,
+    "I64": 8,
+    "I32": 4,
+    "I16": 2,
+    "I8": 1,
+    "U8": 1,
+    "BOOL": 1,
+    # 常见别名
+    "float32": 4,
+    "float16": 2,
+    "bfloat16": 2,
+    "int64": 8,
+    "int32": 4,
+    "int16": 2,
+    "int8": 1,
+    "uint8": 1,
+    "bool": 1,
+}
 
 def create_session(retries=DEFAULT_RETRIES, backoff_factor=DEFAULT_BACKOFF):
     """创建具有重试功能的会话"""
