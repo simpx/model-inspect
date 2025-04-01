@@ -227,7 +227,7 @@ def main():
         
         print(table)
         print(f"\nTotal Layers: {len(layers)}")
-        print(f"\nTotal Parameters Size: {total_size:,} bytes ({total_size/1024**2:.2f} MB)")
+        print(f"Total Parameters Size: {total_size:,} bytes ({total_size/1024**2:.2f} MB)")
         
     except requests.HTTPError as e:
         print(f"Error accessing model: {e}")
