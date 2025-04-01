@@ -133,15 +133,20 @@ def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0, j
     if verbose >= 2:
         print(f"Index content: {index}")
     
-    # 获取所有分片文件头，按文件名排序
-    headers = {}
-    shard_files = sorted(set(index["weight_map"].values()))
+    # 获取所有分片文件
+    shard_files = list(set(index["weight_map"].values()))
+    # 使用自然排序，正确处理数字序列（如 model-00001 排在 model-00002 之前）
+    shard_files.sort()
+
+    if verbose >= 1:
+        print(f"Sorted shard files: {shard_files}")
 
     def fetch_header(filename):
         if verbose >= 1:
             print(f"Parsing shard: {filename}")
         return filename, parse_single_file(repo, filename, revision, verbose, mirror)
 
+    headers = {}
     with tqdm(total=len(shard_files), desc="Processing shards") as pbar:
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as executor:
             future_to_file = {executor.submit(fetch_header, filename): filename for filename in shard_files}
