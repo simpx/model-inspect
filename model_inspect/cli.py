@@ -198,10 +198,11 @@ def main():
     parser.add_argument("--backoff", type=float, default=DEFAULT_BACKOFF, help=f"Backoff factor for retries (default: {DEFAULT_BACKOFF})")
     args = parser.parse_args()
     # Show which URL was used
-    if args.mirror:
-        print(f"\nUsing mirror: {args.mirror}")
-    else:
-        print("\nUsing default Hugging Face URL")
+    if args.verbose >= 1:
+        if args.mirror:
+            print(f"Using mirror: {args.mirror}")
+        else:
+            print("Using default Hugging Face URL")
     try:
         layers = get_model_layers(args.model, args.revision, verbose=args.verbose, jobs=args.jobs, mirror=args.mirror)
         table = PrettyTable()
