@@ -6,6 +6,7 @@ import time
 from collections import defaultdict
 from typing import Dict, List, Tuple, Union
 import concurrent.futures
+import re
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -157,6 +158,10 @@ def parse_sharded_index(repo: str, revision: str = REVISION, verbose: int = 0, j
     
     return index, headers
 
+def natural_sort_key(s):
+    """Natural sort key function that handles numeric values within strings correctly"""
+    return [int(c) if c.isdigit() else c.lower() for c in re.split(r'(\d+)', s)]
+
 def get_model_layers(repo: str, revision: str = REVISION, verbose: int = 0, jobs: int = 1, mirror: str = None) -> List[dict]:
     """获取模型层信息"""
     try:
@@ -178,18 +183,25 @@ def get_model_layers(repo: str, revision: str = REVISION, verbose: int = 0, jobs
                     "dtype": tensor_info["dtype"],
                     "size": tensor_size
                 })
+        
+        # 按照自然排序对结果进行排序
+        all_tensors.sort(key=lambda x: natural_sort_key(x["name"]))
         return all_tensors
     except Exception as e:
         # 处理单个文件情况
         if verbose >= 1:
             print("Falling back to single file parsing, due to exception:", str(e))
         header = parse_single_file(repo, SAFETENSORS_FILE, revision, verbose, mirror)
-        return [{
+        tensors = [{
             "name": name,
             "shape": info["shape"],
             "dtype": info["dtype"],
             "size": math.prod(info["shape"]) * DTYPE_BYTES.get(info["dtype"], 1)
         } for name, info in header.items() if name != "__metadata__"]
+        
+        # 同样对单文件情况应用自然排序
+        tensors.sort(key=lambda x: natural_sort_key(x["name"]))
+        return tensors
 
 def main():
     parser = argparse.ArgumentParser(description="Hugging Face Model Layer Analyzer")
