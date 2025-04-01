@@ -2,11 +2,14 @@ import argparse
 import json
 import math
 import struct
+import time
 from collections import defaultdict
 from typing import Dict, List, Tuple, Union
 import concurrent.futures
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from prettytable import PrettyTable
 from tqdm import tqdm
 
@@ -16,35 +19,60 @@ SAFETENSORS_INDEX_FILE = "model.safetensors.index.json"
 REVISION = "main"
 HF_URL = "https://huggingface.co/{repo}/resolve/{revision}/{filename}"
 HF_MIRROR_URL = "{mirror}/{repo}/resolve/{revision}/{filename}"
-HEADERS = {'Range': 'bytes=0-7'}
-
-# 数据类型到字节数的映射
-DTYPE_BYTES = {
-    "F64": 8,
-    "F32": 4,
-    "F16": 2,
-    "BF16": 2,
-    "I64": 8,
-    "I32": 4,
-    "I16": 2,
-    "I8": 1,
-    "U8": 1,
-    "BOOL": 1
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 }
+DEFAULT_TIMEOUT = 30  # seconds
+DEFAULT_RETRIES = 3
+DEFAULT_BACKOFF = 1  # seconds
 
-def get_file_response(repo: str, filename: str, revision: str = REVISION, range_header: str = None, verbose: int = 0, mirror: str = None) -> requests.Response:
+def create_session(retries=DEFAULT_RETRIES, backoff_factor=DEFAULT_BACKOFF):
+    """创建具有重试功能的会话"""
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    session.headers.update(HEADERS)
+    return session
+
+def get_file_response(repo: str, filename: str, revision: str = REVISION, range_header: str = None, 
+                      verbose: int = 0, mirror: str = None, timeout: int = DEFAULT_TIMEOUT, 
+                      retries: int = DEFAULT_RETRIES, backoff: float = DEFAULT_BACKOFF) -> requests.Response:
     """获取文件响应，支持范围请求"""
     if mirror:
         url = HF_MIRROR_URL.format(mirror=mirror.rstrip('/'), repo=repo, revision=revision, filename=filename)
     else:
         url = HF_URL.format(repo=repo, revision=revision, filename=filename)
     
-    headers = {'Range': range_header} if range_header else {}
+    headers = HEADERS.copy()
+    if range_header:
+        headers['Range'] = range_header
+    
+    session = create_session(retries, backoff)
+    
     if verbose >= 1:
         print(f"Fetching URL: {url} with headers: {headers}")
-    response = requests.get(url, headers=headers, stream=True)
-    response.raise_for_status()
-    return response
+    
+    for attempt in range(retries + 1):
+        try:
+            response = session.get(url, headers=headers, stream=True, timeout=timeout)
+            response.raise_for_status()
+            return response
+        except (requests.RequestException, ConnectionError) as e:
+            if verbose >= 1:
+                print(f"Attempt {attempt+1}/{retries+1} failed: {str(e)}")
+            if attempt == retries:
+                raise
+            time.sleep(backoff * (2 ** attempt))
+    
+    # This should never be reached due to the raise in the except block
+    raise RuntimeError("Unexpected error in request handling")
 
 def parse_single_file(repo: str, filename: str, revision: str = REVISION, verbose: int = 0, mirror: str = None) -> dict:
     """解析单个safetensors文件头"""
@@ -143,6 +171,9 @@ def main():
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Enable verbose output (-v for process, -vv for content)")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="Number of concurrent jobs (default: 1)")
     parser.add_argument("--mirror", type=str, help="Custom Hugging Face mirror URL (e.g. 'https://hf-mirror.com')")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help=f"Request timeout in seconds (default: {DEFAULT_TIMEOUT})")
+    parser.add_argument("--retries", type=int, default=DEFAULT_RETRIES, help=f"Number of retry attempts (default: {DEFAULT_RETRIES})")
+    parser.add_argument("--backoff", type=float, default=DEFAULT_BACKOFF, help=f"Backoff factor for retries (default: {DEFAULT_BACKOFF})")
     args = parser.parse_args()
 
     try:
