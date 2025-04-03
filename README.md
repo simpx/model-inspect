@@ -1,4 +1,5 @@
 # Model Inspect
+[![PyPI version](https://badge.fury.io/py/model-inspect.svg)](https://badge.fury.io/py/model-inspect)
 
 A CLI tool to analyze Hugging Face model architectures without downloading the full model.
 
